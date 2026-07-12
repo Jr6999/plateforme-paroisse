@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connexion</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .card {
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+    }
+    .logo { text-align: center; margin-bottom: 32px; }
+    .logo svg { display: block; margin: 0 auto 12px; }
+    .logo h1 { color: #fff; font-size: 1.6rem; font-weight: 700; letter-spacing: 0.5px; }
+    .logo p { color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-top: 4px; }
+    .form-group { margin-bottom: 20px; }
+    label { display: block; color: rgba(255,255,255,0.75); font-size: 0.85rem; font-weight: 500; margin-bottom: 8px; }
+    input[type="email"],
+    input[type="password"],
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    input::placeholder { color: rgba(255,255,255,0.3); }
+    input:focus { border-color: #e94560; background: rgba(255,255,255,0.12); }
+    .password-wrapper { position: relative; }
+    .toggle-password {
+      position: absolute; right: 14px; top: 50%;
+      transform: translateY(-50%);
+      background: none; border: none; cursor: pointer;
+      color: rgba(255,255,255,0.4); font-size: 1rem;
+      transition: color 0.2s; padding: 0;
+    }
+    .toggle-password:hover { color: rgba(255,255,255,0.8); }
+    .options {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 28px; margin-top: -4px;
+    }
+    .remember {
+      display: flex; align-items: center; gap: 8px;
+      color: rgba(255,255,255,0.55); font-size: 0.83rem; cursor: pointer;
+    }
+    .remember input[type="checkbox"] { width: 16px; height: 16px; accent-color: #e94560; cursor: pointer; }
+    .forgot { color: #e94560; font-size: 0.83rem; text-decoration: none; transition: opacity 0.2s; }
+    .forgot:hover { opacity: 0.75; }
+    .btn-login {
+      width: 100%; padding: 14px;
+      background: linear-gradient(135deg, #e94560, #c0392b);
+      border: none; border-radius: 10px; color: #fff;
+      font-size: 1rem; font-weight: 600; cursor: pointer;
+      letter-spacing: 0.5px; transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn-login:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-login:active { transform: translateY(0); }
+    .divider { display: flex; align-items: center; gap: 12px; margin: 24px 0; }
+    .divider span { color: rgba(255,255,255,0.3); font-size: 0.8rem; white-space: nowrap; }
+    .divider::before,
+    .divider::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,0.1); }
+    .btn-google {
+      width: 100%; padding: 12px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px; color: rgba(255,255,255,0.85);
+      font-size: 0.9rem; font-weight: 500; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: background 0.2s;
+    }
+    .btn-google:hover { background: rgba(255,255,255,0.12); }
+    .signup { text-align: center; margin-top: 24px; color: rgba(255,255,255,0.45); font-size: 0.85rem; }
+    .signup a { color: #e94560; text-decoration: none; font-weight: 500; }
+    .signup a:hover { text-decoration: underline; }
+    .error-msg { color: #ff6b6b; font-size: 0.8rem; margin-top: 6px; display: none; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+
+    <div class="logo">
+      <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="28" cy="28" r="28" fill="#e94560" opacity="0.15"/>
+        <path d="M28 14 L28 42 M14 28 L42 28" stroke="#e94560" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="28" cy="28" r="6" fill="#e94560"/>
+      </svg>
+      <h1>Paroisse</h1>
+      <p>Connectez-vous &agrave; votre espace</p>
+    </div>
+
+    <form id="loginForm" novalidate>
+
+      <div class="form-group">
+        <label for="email">Adresse e-mail</label>
+        <input type="email" id="email" name="email"
+          placeholder="exemple@email.com" autocomplete="email" required />
+        <span class="error-msg" id="emailError">Veuillez saisir un e-mail valide.</span>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Mot de passe</label>
+        <div class="password-wrapper">
+          <input type="password" id="password" name="password"
+            placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"
+            autocomplete="current-password" required />
+          <button type="button" class="toggle-password"
+            aria-label="Afficher/masquer le mot de passe"
+            onclick="togglePassword()">&#128065;</button>
+        </div>
+        <span class="error-msg" id="passwordError">Le mot de passe est requis.</span>
+      </div>
+
+      <div class="options">
+        <label class="remember">
+          <input type="checkbox" id="remember" />
+          Se souvenir de moi
+        </label>
+        <a href="#" class="forgot">Mot de passe oubli&eacute; ?</a>
+      </div>
+
+      <button type="submit" class="btn-login">Se connecter</button>
+    </form>
+
+    <div class="divider"><span>ou continuer avec</span></div>
+
+    <button class="btn-google" type="button">
+      <svg width="18" height="18" viewBox="0 0 48 48">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>
+      Continuer avec Google
+    </button>
+
+    <p class="signup">
+      Pas encore de compte ? <a href="#">Cr&eacute;er un compte</a>
+    </p>
+
+  </div>
+
+  <script>
+    function togglePassword() {
+      var input = document.getElementById("password");
+      var btn = document.querySelector(".toggle-password");
+      if (input.type === "password") {
+        input.type = "text";
+        btn.innerHTML = "&#128584;";
+      } else {
+        input.type = "password";
+        btn.innerHTML = "&#128065;";
+      }
+    }
+
+    document.getElementById("loginForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var valid = true;
+      var email = document.getElementById("email");
+      var password = document.getElementById("password");
+      var emailError = document.getElementById("emailError");
+      var passwordError = document.getElementById("passwordError");
+
+      emailError.style.display = "none";
+      passwordError.style.display = "none";
+
+      var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.value.trim())) {
+        emailError.style.display = "block";
+        valid = false;
+      }
+      if (password.value.trim() === "") {
+        passwordError.style.display = "block";
+        valid = false;
+      }
+      if (valid) {
+        alert("Connexion en cours...");
+      }
+    });
+  </script>
+
+</body>
+</html>

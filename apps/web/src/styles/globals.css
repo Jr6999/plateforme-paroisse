@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 43 45% 96%;
+  --foreground: 212 52% 14%;
+  --card: 0 0% 100%;
+  --card-foreground: 212 52% 14%;
+  --primary: 211 52% 14%;
+  --primary-foreground: 43 45% 96%;
+  --secondary: 211 22% 91%;
+  --secondary-foreground: 212 52% 14%;
+  --muted: 210 18% 92%;
+  --muted-foreground: 215 16% 42%;
+  --accent: 39 45% 58%;
+  --accent-foreground: 212 52% 14%;
+  --destructive: 0 72% 48%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 22% 85%;
+  --input: 214 22% 85%;
+  --ring: 39 45% 58%;
+}
+
+.dark {
+  --background: 212 52% 8%;
+  --foreground: 43 45% 94%;
+  --card: 212 44% 11%;
+  --card-foreground: 43 45% 94%;
+  --primary: 43 45% 94%;
+  --primary-foreground: 212 52% 10%;
+  --secondary: 212 32% 16%;
+  --secondary-foreground: 43 45% 94%;
+  --muted: 212 26% 18%;
+  --muted-foreground: 212 14% 72%;
+  --accent: 39 45% 58%;
+  --accent-foreground: 212 52% 10%;
+  --destructive: 0 72% 48%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 212 24% 22%;
+  --input: 212 24% 22%;
+  --ring: 39 45% 58%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-feature-settings: "liga" 1, "kern" 1;
+}
+
+.glass {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.68);
+  backdrop-filter: blur(18px);
+}
+
+.dark .glass {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(13, 27, 42, 0.72);
+}
+
+.liturgical-grid {
+  background-image:
+    linear-gradient(rgba(200, 164, 93, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 164, 93, 0.08) 1px, transparent 1px);
+  background-size: 36px 36px;
+}

@@ -1,0 +1,521 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+  ARCHIVED
+}
+
+enum PublicationStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum EventStatus {
+  DRAFT
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED
+  LATE
+}
+
+enum CatechumenStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+  PDF
+  DOCUMENT
+}
+
+enum NotificationType {
+  ANNOUNCEMENT
+  EVENT
+  COMMUNITY
+  CATECHESIS
+  SYSTEM
+}
+
+model User {
+  id                     String              @id @default(cuid())
+  email                  String              @unique
+  passwordHash           String
+  name                   String
+  phone                  String?
+  address                String?
+  avatarUrl              String?
+  emailVerifiedAt        DateTime?
+  status                 UserStatus          @default(ACTIVE)
+  roles                  UserRole[]
+  refreshTokens          RefreshToken[]
+  announcements          Announcement[]      @relation("AnnouncementAuthor")
+  comments               Comment[]           @relation("CommentAuthor")
+  reactions              Reaction[]
+  eventRegistrations     EventRegistration[]
+  communityMemberships   CommunityMember[]
+  coordinatedCommunities Community[]         @relation("CommunityCoordinator")
+  responsibleCatechumens Catechumen[]        @relation("CatechumenResponsible")
+  attendanceRecords      Attendance[]        @relation("AttendanceRecorder")
+  rhythmCourses          SacredRhythm[]      @relation("SacredRhythmInstructor")
+  notifications          Notification[]
+  sentMessages           Message[]           @relation("MessageSender")
+  receivedMessages       Message[]           @relation("MessageReceiver")
+  auditLogs              AuditLog[]
+  uploadedDocuments      Document[]          @relation("DocumentUploader")
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  label       String
+  description String?
+  users       UserRole[]
+  permissions RolePermission[]
+  createdAt   DateTime         @default(now())
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  label       String
+  description String?
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now())
+}
+
+model UserRole {
+  userId    String
+  roleId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@id([roleId, permissionId])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Announcement {
+  id           String            @id @default(cuid())
+  title        String
+  slug         String            @unique
+  excerpt      String
+  content      String
+  category     String
+  tags         String[]
+  status       PublicationStatus @default(DRAFT)
+  isPinned     Boolean           @default(false)
+  authorId     String
+  author       User              @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+  communityId  String?
+  community    Community?        @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  comments     Comment[]
+  reactions    Reaction[]
+  documents    Document[]
+  publishedAt  DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([status, publishedAt])
+  @@index([category])
+  @@index([communityId])
+}
+
+model Comment {
+  id             String            @id @default(cuid())
+  content        String
+  status         PublicationStatus @default(PUBLISHED)
+  authorId       String
+  author         User              @relation("CommentAuthor", fields: [authorId], references: [id])
+  announcementId String
+  announcement   Announcement      @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  parentId       String?
+  parent         Comment?          @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies        Comment[]         @relation("CommentReplies")
+  reactions      Reaction[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([announcementId])
+  @@index([parentId])
+}
+
+model Reaction {
+  id             String        @id @default(cuid())
+  type           String        @default("LIKE")
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcementId String?
+  announcement   Announcement? @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  commentId      String?
+  comment        Comment?      @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+
+  @@index([announcementId])
+  @@index([commentId])
+  @@unique([userId, announcementId, type], name: "unique_user_announcement_reaction")
+  @@unique([userId, commentId, type], name: "unique_user_comment_reaction")
+}
+
+model EventCategory {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  color       String   @default("#c8a45d")
+  description String?
+  events      Event[]
+  createdAt   DateTime @default(now())
+}
+
+model Event {
+  id             String              @id @default(cuid())
+  title          String
+  slug           String              @unique
+  description    String
+  status         EventStatus         @default(SCHEDULED)
+  startAt        DateTime
+  endAt          DateTime?
+  location       String
+  coverImageUrl  String?
+  capacity       Int?
+  registrationUrl String?
+  livestreamUrl  String?
+  categoryId     String?
+  category       EventCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  communityId    String?
+  community      Community?          @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  registrations  EventRegistration[]
+  galleryItems   MediaAsset[]
+  attendance     Attendance[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([status, startAt])
+  @@index([communityId])
+}
+
+model EventRegistration {
+  id        String   @id @default(cuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guests    Int      @default(0)
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userId])
+}
+
+model Community {
+  id           String            @id @default(cuid())
+  name         String
+  slug         String            @unique
+  logoUrl      String?
+  coverImageUrl String?
+  story        String
+  mission      String
+  status       PublicationStatus @default(PUBLISHED)
+  coordinatorId String?
+  coordinator  User?             @relation("CommunityCoordinator", fields: [coordinatorId], references: [id], onDelete: SetNull)
+  members      CommunityMember[]
+  events       Event[]
+  announcements Announcement[]
+  galleryItems MediaAsset[]
+  messages     Message[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([status])
+}
+
+model CommunityMember {
+  id          String    @id @default(cuid())
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        String    @default("membre")
+  joinedAt    DateTime  @default(now())
+
+  @@unique([communityId, userId])
+  @@index([role])
+}
+
+model Leader {
+  id              String            @id @default(cuid())
+  name            String
+  slug            String            @unique
+  title           String
+  roleType        String
+  photoUrl        String?
+  biography       String
+  serviceStart    DateTime?
+  serviceEnd      DateTime?
+  accomplishments String[]
+  quotes          String[]
+  status          PublicationStatus @default(PUBLISHED)
+  sortOrder       Int               @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([roleType, status])
+}
+
+model ParishHistory {
+  id          String            @id @default(cuid())
+  title       String
+  slug        String            @unique
+  period      String?
+  occurredAt  DateTime?
+  description String
+  mediaUrl    String?
+  documentUrl String?
+  type        String            @default("archive")
+  status      PublicationStatus @default(PUBLISHED)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([status, occurredAt])
+}
+
+model Catechumen {
+  id            String            @id @default(cuid())
+  firstName     String
+  lastName      String
+  sex           String
+  birthDate     DateTime?
+  photoUrl      String?
+  phone         String?
+  address       String?
+  level         String
+  progression   Int               @default(0)
+  status        CatechumenStatus   @default(ACTIVE)
+  guardianName  String?
+  notes         String?
+  responsibleId String?
+  responsible   User?             @relation("CatechumenResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  sacraments    SacramentRecord[]
+  attendance    Attendance[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([status, level])
+  @@index([lastName, firstName])
+}
+
+model SacramentRecord {
+  id           String     @id @default(cuid())
+  catechumenId String
+  catechumen   Catechumen @relation(fields: [catechumenId], references: [id], onDelete: Cascade)
+  sacrament    String
+  receivedAt   DateTime?
+  church       String?
+  notes        String?
+  createdAt    DateTime   @default(now())
+
+  @@index([sacrament])
+}
+
+model SacredRhythm {
+  id           String       @id @default(cuid())
+  title        String
+  slug         String       @unique
+  theme        String
+  description  String
+  level        String
+  startAt      DateTime
+  endAt        DateTime?
+  location     String?
+  instructorId String?
+  instructor   User?        @relation("SacredRhythmInstructor", fields: [instructorId], references: [id], onDelete: SetNull)
+  lessons      SacredLesson[]
+  attendance   Attendance[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([level, startAt])
+}
+
+model SacredLesson {
+  id             String       @id @default(cuid())
+  sacredRhythmId String
+  sacredRhythm   SacredRhythm @relation(fields: [sacredRhythmId], references: [id], onDelete: Cascade)
+  title          String
+  content        String
+  position       Int
+  resourcesUrl   String?
+  createdAt      DateTime     @default(now())
+}
+
+model Attendance {
+  id             String           @id @default(cuid())
+  catechumenId   String
+  catechumen     Catechumen       @relation(fields: [catechumenId], references: [id], onDelete: Cascade)
+  kind           String
+  status         AttendanceStatus @default(PRESENT)
+  attendedAt     DateTime
+  note           String?
+  eventId        String?
+  event          Event?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  sacredRhythmId String?
+  sacredRhythm   SacredRhythm?    @relation(fields: [sacredRhythmId], references: [id], onDelete: SetNull)
+  recordedById   String?
+  recordedBy     User?            @relation("AttendanceRecorder", fields: [recordedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime         @default(now())
+
+  @@index([catechumenId, attendedAt])
+  @@index([kind, status])
+}
+
+model Gallery {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  entityType  String?
+  entityId    String?
+  items       MediaAsset[]
+  createdAt   DateTime     @default(now())
+}
+
+model MediaAsset {
+  id                String       @id @default(cuid())
+  title             String
+  type              MediaType
+  url               String
+  thumbnailUrl      String?
+  cloudinaryPublicId String?
+  caption           String?
+  galleryId         String?
+  gallery           Gallery?     @relation(fields: [galleryId], references: [id], onDelete: SetNull)
+  eventId           String?
+  event             Event?       @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  communityId       String?
+  community         Community?   @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  createdAt         DateTime     @default(now())
+
+  @@index([type])
+  @@index([galleryId])
+}
+
+model Document {
+  id             String        @id @default(cuid())
+  title          String
+  url            String
+  mimeType       String
+  sizeBytes      Int?
+  entityType     String?
+  entityId       String?
+  announcementId String?
+  announcement   Announcement? @relation(fields: [announcementId], references: [id], onDelete: SetNull)
+  uploadedById   String?
+  uploadedBy     User?         @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+
+  @@index([entityType, entityId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  type      NotificationType @default(SYSTEM)
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, readAt])
+}
+
+model Testimonial {
+  id        String            @id @default(cuid())
+  author    String
+  role      String?
+  avatarUrl String?
+  content   String
+  status    PublicationStatus @default(PUBLISHED)
+  createdAt DateTime          @default(now())
+}
+
+model Message {
+  id          String     @id @default(cuid())
+  content     String
+  senderId    String
+  sender      User       @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId  String?
+  receiver    User?      @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: SetNull)
+  communityId String?
+  community   Community? @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  readAt      DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@index([communityId, createdAt])
+  @@index([receiverId, readAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  ipAddress String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}

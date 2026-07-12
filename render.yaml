@@ -1,0 +1,35 @@
+services:
+  - type: web
+    runtime: node
+    name: paroisse-api
+    plan: free
+    buildCommand: npm ci && npm run build --workspace apps/api
+    startCommand: npm run db:deploy --workspace apps/api && npm run start --workspace apps/api
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_URL
+        sync: false
+      - key: WEB_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: COOKIE_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: BCRYPT_ROUNDS
+        value: 12
+      - key: RATE_LIMIT_WINDOW_MS
+        value: 60000
+      - key: RATE_LIMIT_MAX
+        value: 120
+      - key: MAIL_FROM
+        value: "Paroisse Cathedrale <noreply@paroisse.local>"
