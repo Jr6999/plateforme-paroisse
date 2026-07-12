@@ -1,0 +1,75 @@
+# Configuration Koyeb — Plateforme Paroisse Cathédrale
+# Deux services : API (Express + Prisma) et Web (Next.js)
+# Documentation : https://www.koyeb.com/docs
+
+services:
+  # ── Service API ─────────────────────────────────────────────────────────────
+  - name: paroisse-api
+    type: web
+    git:
+      repository: github.com/Jr6999/plateforme-paroisse
+      branch: main
+    build:
+      dockerfile: apps/api/Dockerfile
+      context: .
+    ports:
+      - port: 4000
+        protocol: http
+    health_checks:
+      - path: /health
+        port: 4000
+        protocol: http
+        initial_delay_seconds: 30
+        period_seconds: 30
+        timeout_seconds: 10
+        success_threshold: 1
+        failure_threshold: 3
+    env:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      # Les secrets suivants doivent être définis dans le dashboard Koyeb :
+      # DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET,
+      # COOKIE_SECRET, CORS_ORIGINS, WEB_URL, API_URL,
+      # CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET,
+      # SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
+    scaling:
+      min: 1
+      max: 2
+
+  # ── Service Web ─────────────────────────────────────────────────────────────
+  - name: paroisse-web
+    type: web
+    git:
+      repository: github.com/Jr6999/plateforme-paroisse
+      branch: main
+    build:
+      dockerfile: apps/web/Dockerfile
+      context: .
+      args:
+        - NEXT_PUBLIC_API_URL: https://paroisse-api-<your-koyeb-domain>.koyeb.app/api
+        - NEXT_PUBLIC_SITE_URL: https://paroisse-web-<your-koyeb-domain>.koyeb.app
+    ports:
+      - port: 3000
+        protocol: http
+    health_checks:
+      - path: /
+        port: 3000
+        protocol: http
+        initial_delay_seconds: 30
+        period_seconds: 30
+        timeout_seconds: 10
+        success_threshold: 1
+        failure_threshold: 3
+    env:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: HOSTNAME
+        value: "0.0.0.0"
+      # NEXT_PUBLIC_API_URL doit correspondre à l'URL publique du service API
+    scaling:
+      min: 1
+      max: 2
