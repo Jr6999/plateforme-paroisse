@@ -32,7 +32,7 @@ ENV HOSTNAME=0.0.0.0
 # Utilisateur non-root
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001 -G nodejs
 
-# Mode standalone : seuls ces dossiers sont nécessaires
+# Mode standalone Next.js : copier le serveur standalone + assets statiques + public
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
@@ -41,7 +41,8 @@ USER nextjs
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD wget -qO- http://localhost:3000 || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD wget -qO- http://localhost:3000/api/health 2>/dev/null || wget -qO- http://localhost:3000 || exit 1
 
+# Next.js standalone génère server.js à la racine du répertoire standalone
 CMD ["node", "apps/web/server.js"]
