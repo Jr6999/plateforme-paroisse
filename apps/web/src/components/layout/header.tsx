@@ -37,11 +37,12 @@ export const Header = () => {
         <div className="container flex h-16 items-center justify-between gap-4">
           {/* Logo */}
           <Link href="/" className="flex min-w-0 items-center gap-3">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground overflow-hidden">
               <Church className="h-4 w-4" />
             </span>
             <span className="hidden min-w-0 flex-col leading-tight sm:flex">
-              <span className="truncate text-sm font-semibold">Paroisse Cathédrale</span>
+              <span className="truncate text-sm font-semibold">Cathédrale Saint Sauveur</span>
+              <span className="truncate text-xs text-muted-foreground">Natitingou • Bénin</span>
             </span>
           </Link>
 

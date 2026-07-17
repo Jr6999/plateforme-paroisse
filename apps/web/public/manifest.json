@@ -1,7 +1,7 @@
 {
-  "name": "Paroisse Cathedrale",
-  "short_name": "Paroisse",
-  "description": "Plateforme communautaire et pastorale de la paroisse cathedrale.",
+  "name": "Cathédrale Saint Sauveur de Natitingou",
+  "short_name": "Cathédrale",
+  "description": "Plateforme numérique communautaire et pastorale de la Cathédrale Saint Sauveur de Natitingou, Bénin.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0d1b2a",

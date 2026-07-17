@@ -273,6 +273,7 @@ model Community {
   announcements Announcement[]
   galleryItems MediaAsset[]
   messages     Message[]
+  catechumens  Catechumen[]
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
@@ -330,28 +331,56 @@ model ParishHistory {
 }
 
 model Catechumen {
-  id            String            @id @default(cuid())
-  firstName     String
-  lastName      String
-  sex           String
-  birthDate     DateTime?
-  photoUrl      String?
-  phone         String?
-  address       String?
-  level         String
-  progression   Int               @default(0)
-  status        CatechumenStatus   @default(ACTIVE)
-  guardianName  String?
-  notes         String?
-  responsibleId String?
-  responsible   User?             @relation("CatechumenResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
-  sacraments    SacramentRecord[]
-  attendance    Attendance[]
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  id                 String            @id @default(cuid())
+  firstName          String
+  lastName           String
+  sex                String
+  birthDate          DateTime?
+  birthPlace         String?
+  photoUrl           String?
+  phone              String?
+  email              String?
+  address            String?
+  neighborhood       String?
+  profession         String?
+  educationLevel     String?
+  maritalStatus      String?
+  fatherName         String?
+  motherName         String?
+  emergencyContact   String?
+  emergencyPhone     String?
+  level              String
+  progression        Int               @default(0)
+  status             CatechumenStatus  @default(ACTIVE)
+  communityId        String?
+  community          Community?        @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  guardianName       String?
+  notes              String?
+  responsibleId      String?
+  responsible        User?             @relation("CatechumenResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
+  registrationDate   DateTime?
+  sacraments         SacramentRecord[]
+  attendance         Attendance[]
+  documents          CatechumenDocument[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   @@index([status, level])
   @@index([lastName, firstName])
+  @@index([communityId])
+}
+
+model CatechumenDocument {
+  id           String     @id @default(cuid())
+  catechumenId String
+  catechumen   Catechumen @relation(fields: [catechumenId], references: [id], onDelete: Cascade)
+  title        String
+  url          String
+  mimeType     String
+  sizeBytes    Int?
+  createdAt    DateTime   @default(now())
+
+  @@index([catechumenId])
 }
 
 model SacramentRecord {

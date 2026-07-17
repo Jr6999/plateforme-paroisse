@@ -13,11 +13,11 @@ const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-serif"
 
 export const metadata: Metadata = {
   title: {
-    default: "Paroisse Cathedrale",
-    template: "%s | Paroisse Cathedrale"
+    default: "Cathédrale Saint Sauveur de Natitingou",
+    template: "%s | Cathédrale Saint Sauveur"
   },
   description:
-    "Plateforme communautaire, historique, evenementielle et administrative de la paroisse cathedrale.",
+    "Plateforme numérique communautaire, historique, événementielle et administrative de la Cathédrale Saint Sauveur de Natitingou, Bénin.",
   manifest: "/manifest.json",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000")
 };

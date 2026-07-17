@@ -1,9 +1,8 @@
-import { Mail, MapPin, Phone, Facebook, Clock, Send } from "lucide-react";
+import { Mail, MapPin, Phone, Facebook, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { PageHeading } from "@/components/sections/page-heading";
+import { ContactForm } from "@/features/contact/contact-form";
 
 export const metadata = { title: "Contact" };
 
@@ -13,40 +12,14 @@ export default function ContactPage() {
       <PageHeading
         eyebrow="Contactez-nous"
         title="Bureau paroissial"
-        description="Pour toute question, inscription ou demande d'accompagnement. Nous sommes disponibles du lundi au samedi."
+        description="Cathédrale Saint Sauveur de Natitingou. Pour toute question, inscription ou demande d'accompagnement."
       />
 
       <section className="container py-14 grid gap-10 lg:grid-cols-[1fr_380px]">
         {/* Form */}
         <div className="space-y-6">
           <h2 className="text-xl font-semibold">Envoyer un message</h2>
-          <form className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Nom complet</label>
-                <Input placeholder="Votre nom" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Email</label>
-                <Input type="email" placeholder="votre@email.com" />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Sujet</label>
-              <Input placeholder="De quoi s'agit-il ?" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Message</label>
-              <textarea
-                rows={6}
-                placeholder="Écrivez votre message ici…"
-                className="w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
-              />
-            </div>
-            <Button variant="gold" size="lg">
-              <Send className="h-4 w-4" /> Envoyer le message
-            </Button>
-          </form>
+          <ContactForm />
         </div>
 
         {/* Contact info */}
@@ -59,7 +32,7 @@ export default function ContactPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold">Adresse</p>
-                  <p className="text-sm text-muted-foreground">Bureau paroissial, Avenue Principale<br />Kinshasa, R.D. Congo</p>
+                  <p className="text-sm text-muted-foreground">Natitingou, Bénin</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -68,7 +41,7 @@ export default function ContactPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold">Téléphone</p>
-                  <p className="text-sm text-muted-foreground">+243 000 000 000</p>
+                  <p className="text-sm text-muted-foreground">[INSÉRER MON NUMÉRO]</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -77,7 +50,7 @@ export default function ContactPage() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold">Email</p>
-                  <p className="text-sm text-muted-foreground">contact@paroisse.local</p>
+                  <p className="text-sm text-muted-foreground">[INSÉRER MON EMAIL]</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">

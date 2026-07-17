@@ -45,11 +45,12 @@ export default async function HomePage() {
         </div>
         <div className="container relative grid min-h-[calc(100svh-4rem)] items-center gap-10 py-16 md:grid-cols-[1.1fr_0.9fr]">
           <div className="max-w-3xl">
-            <Badge variant="gold">Plateforme pastorale moderne</Badge>
+            <Badge variant="gold">Plateforme pastorale numérique</Badge>
             <h1 className="mt-6 font-serif text-5xl font-semibold leading-tight tracking-normal md:text-7xl">
-              Bienvenue à la<br />Paroisse Cathédrale
+              Bienvenue à la<br />Cathédrale<br />Saint Sauveur
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-ivory/75">
+            <p className="mt-4 text-base text-gold/90 font-medium">Natitingou • Bénin</p>
+            <p className="mt-4 max-w-2xl text-lg leading-8 text-ivory/75">
               Une communauté vivante de foi, d'espérance et d'amour. Un espace numérique pour raconter l'histoire, annoncer et unir.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">

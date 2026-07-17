@@ -30,10 +30,10 @@ const swaggerSpec = swaggerJSDoc({
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "API Plateforme Paroisse Cathedrale",
+      title: "API Cathédrale Saint Sauveur de Natitingou",
       version: "0.1.0",
       description:
-        "API REST pour la gestion historique, communautaire, catechetique et administrative de la paroisse."
+        "API REST pour la gestion historique, communautaire, catéchétique et administrative de la Cathédrale Saint Sauveur de Natitingou, Bénin."
     },
     servers: [{ url: `${env.API_URL}/api` }],
     components: {

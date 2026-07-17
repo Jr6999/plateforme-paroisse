@@ -16,6 +16,7 @@ import {
   User,
   LogOut
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -46,23 +47,31 @@ export const Sidebar = () => {
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-night text-ivory lg:flex">
-      {/* Logo */}
-      <div className="flex items-center gap-3 border-b border-white/10 p-5">
-        <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-gold text-night">
-          <Church className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <p className="truncate font-semibold text-ivory">Paroisse</p>
-          <p className="truncate text-xs text-ivory/60">Cathédrale</p>
+      {/* Logo — Cathédrale Saint Sauveur */}
+      <Link
+        href="/"
+        className="group block border-b border-white/10 p-4"
+        aria-label="Cathédrale Saint Sauveur de Natitingou — Accueil"
+      >
+        <div className="overflow-hidden rounded-xl shadow-md transition-transform duration-300 group-hover:scale-[1.02]">
+          <div className="relative aspect-video w-full">
+            <Image
+              src="/images/cathedrale.jpg"
+              alt="Cathédrale Saint Sauveur de Natitingou"
+              fill
+              className="object-cover"
+              sizes="224px"
+              priority
+            />
+          </div>
         </div>
-      </div>
-
-      {/* Description */}
-      <div className="border-b border-white/10 px-5 py-4">
-        <p className="text-xs leading-5 text-ivory/55">
-          Plateforme numérique de gestion, de communication et de vie paroissiale
-        </p>
-      </div>
+        <div className="mt-3 px-1">
+          <p className="text-sm font-semibold leading-snug text-ivory">
+            Cathédrale Saint Sauveur de Natitingou
+          </p>
+          <p className="mt-0.5 text-xs text-ivory/55">Natitingou • Bénin</p>
+        </div>
+      </Link>
 
       {/* Nav */}
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
@@ -86,7 +95,7 @@ export const Sidebar = () => {
         })}
       </nav>
 
-      {/* Quote */}
+      {/* Citation */}
       <div className="border-t border-white/10 px-5 py-4">
         <p className="text-xs italic leading-5 text-ivory/50">
           « Soyez dans la joie du Seigneur tous les jours »
