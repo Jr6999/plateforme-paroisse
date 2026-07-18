@@ -1,20 +1,52 @@
+# Dépendances
 node_modules
 apps/*/node_modules
+
+# Build Next.js
 .next
 apps/web/.next
+
+# Build API
 dist
 apps/api/dist
+
+# Tests et couverture
 coverage
 test-results
 playwright-report
+
+# Fichiers TypeScript compilés
 *.tsbuildinfo
+
+# Variables d'environnement (secrets)
 .env
 .env.local
 .env.*.local
+
+# Logs
 *.log
+npm-debug.log*
+
+# Uploads locaux (jamais en image Docker — utiliser Cloudinary)
 /uploads
 /apps/api/uploads
+
+# Temporaire
 tmp
+.tmp
+
+# Git
 .git
+.gitignore
+
+# OS
 .DS_Store
 Thumbs.db
+
+# IDE
+.vscode
+.idea
+
+# Prisma généré (régénéré au build)
+apps/api/generated
+apps/api/src/generated

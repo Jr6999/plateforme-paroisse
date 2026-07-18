@@ -1,10 +1,12 @@
-# Configuration Koyeb — Plateforme Paroisse Cathédrale
-# Deux services : API (Express + Prisma) et Web (Next.js)
-# Documentation : https://www.koyeb.com/docs
+# ═══════════════════════════════════════════════════════════════
+#  Cathédrale Saint Sauveur de Natitingou
+#  Configuration Koyeb — Deux services Docker
+#  Dépôt : https://github.com/Jr6999/plateforme-paroisse
+# ═══════════════════════════════════════════════════════════════
 
 services:
-  # ── Service API ─────────────────────────────────────────────────────────────
-  - name: paroisse-api
+  # ── Service API (Backend Express + Prisma) ──────────────────────
+  - name: cathedrale-api
     type: web
     git:
       repository: github.com/Jr6999/plateforme-paroisse
@@ -19,27 +21,26 @@ services:
       - path: /health
         port: 4000
         protocol: http
-        initial_delay_seconds: 30
+        initial_delay_seconds: 40
         period_seconds: 30
         timeout_seconds: 10
-        success_threshold: 1
         failure_threshold: 3
     env:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: "4000"
-      # Les secrets suivants doivent être définis dans le dashboard Koyeb :
+      # ⚠️  Secrets à définir dans le dashboard Koyeb :
       # DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET,
       # COOKIE_SECRET, CORS_ORIGINS, WEB_URL, API_URL,
       # CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET,
-      # SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
+      # SMTP_HOST, SMTP_USER, SMTP_PASS
     scaling:
       min: 1
-      max: 2
+      max: 1
 
-  # ── Service Web ─────────────────────────────────────────────────────────────
-  - name: paroisse-web
+  # ── Service Web (Frontend Next.js Standalone) ───────────────────
+  - name: cathedrale-web
     type: web
     git:
       repository: github.com/Jr6999/plateforme-paroisse
@@ -48,8 +49,9 @@ services:
       dockerfile: apps/web/Dockerfile
       context: .
       args:
-        - NEXT_PUBLIC_API_URL: https://paroisse-api-<your-koyeb-domain>.koyeb.app/api
-        - NEXT_PUBLIC_SITE_URL: https://paroisse-web-<your-koyeb-domain>.koyeb.app
+        # ⚠️  Remplacer par l'URL publique du service API Koyeb
+        NEXT_PUBLIC_API_URL: https://cathedrale-api-XXXX.koyeb.app/api
+        NEXT_PUBLIC_SITE_URL: https://cathedrale-web-XXXX.koyeb.app
     ports:
       - port: 3000
         protocol: http
@@ -57,10 +59,9 @@ services:
       - path: /
         port: 3000
         protocol: http
-        initial_delay_seconds: 30
+        initial_delay_seconds: 40
         period_seconds: 30
         timeout_seconds: 10
-        success_threshold: 1
         failure_threshold: 3
     env:
       - key: NODE_ENV
@@ -69,7 +70,8 @@ services:
         value: "3000"
       - key: HOSTNAME
         value: "0.0.0.0"
-      # NEXT_PUBLIC_API_URL doit correspondre à l'URL publique du service API
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
     scaling:
       min: 1
-      max: 2
+      max: 1

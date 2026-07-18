@@ -101,9 +101,14 @@ export const createApp = () => {
     message: { error: "Trop de tentatives de connexion. Réessayez dans 15 minutes." }
   });
   app.use(express.json({ limit: "2mb" }));
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.urlencoded({ extended: true, limit: "2mb" }));
+  // Morgan : logs JSON en production (stdout/stderr pour Render/Railway/Koyeb)
+  // Utiliser "combined" en production pour compatibilité avec les outils de monitoring
   app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
-  app.use("/uploads", express.static(uploadsDirectory));
+  // Servir les uploads locaux uniquement en développement
+  if (env.NODE_ENV !== "production") {
+    app.use("/uploads", express.static(uploadsDirectory));
+  }
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });

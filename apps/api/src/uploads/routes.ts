@@ -1,4 +1,3 @@
-import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { Router } from "express";
 import multer from "multer";
@@ -15,6 +14,11 @@ import { prisma } from "../prisma/client.js";
 
 export const uploadsRouter = Router();
 
+/**
+ * Répertoire uploads local — utilisé uniquement en développement.
+ * En production (Render / Koyeb / Railway), les fichiers sont envoyés vers Cloudinary.
+ * Cette valeur est conservée pour la compatibilité avec app.ts (express.static).
+ */
 export const uploadsDirectory = path.resolve(process.cwd(), "uploads");
 
 const allowedMimeTypes = new Set([
@@ -27,32 +31,69 @@ const allowedMimeTypes = new Set([
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 ]);
 
-const ensureUploadsDirectory = () => {
-  if (!existsSync(uploadsDirectory)) mkdirSync(uploadsDirectory, { recursive: true });
-};
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, callback) => {
-    ensureUploadsDirectory();
-    callback(null, uploadsDirectory);
-  },
-  filename: (_req, file, callback) => {
-    const extension = path.extname(file.originalname).toLowerCase();
-    const basename = toSlug(path.basename(file.originalname, extension)) || "document";
-    callback(null, `${basename}-${Date.now().toString(36)}${extension}`);
-  }
-});
+/**
+ * Utilise memoryStorage en production pour éviter l'écriture disque éphémère.
+ * Les fichiers en mémoire sont ensuite transférés vers Cloudinary.
+ * En développement, diskStorage peut être utilisé localement.
+ */
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 Mo max
   fileFilter: (_req, file, callback) => {
     if (!allowedMimeTypes.has(file.mimetype)) {
-      return callback(new HttpError(415, "Type de fichier non autorise"));
+      return callback(new HttpError(415, "Type de fichier non autorisé"));
     }
     callback(null, true);
   }
 });
+
+/**
+ * Upload vers Cloudinary si configuré, sinon retourne une URL temporaire.
+ */
+const uploadToCloudinary = async (
+  buffer: Buffer,
+  filename: string,
+  mimeType: string
+): Promise<{ url: string; publicId?: string }> => {
+  const hasCloudinary =
+    env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET;
+
+  if (!hasCloudinary) {
+    // Mode développement : stocker en mémoire et retourner une URL symbolique
+    console.warn("[Upload] Cloudinary non configuré — fichier non persisté en production");
+    const ext = path.extname(filename).toLowerCase();
+    const base = toSlug(path.basename(filename, ext)) || "document";
+    return { url: `${env.API_URL}/uploads/${base}-${Date.now().toString(36)}${ext}` };
+  }
+
+  // Cloudinary SDK via import dynamique pour éviter une dépendance obligatoire
+  const { v2: cloudinary } = await import("cloudinary");
+  cloudinary.config({
+    cloud_name: env.CLOUDINARY_CLOUD_NAME,
+    api_key: env.CLOUDINARY_API_KEY,
+    api_secret: env.CLOUDINARY_API_SECRET,
+    secure: true
+  });
+
+  return new Promise((resolve, reject) => {
+    const isImage = mimeType.startsWith("image/");
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: isImage ? "image" : "raw",
+        folder: "paroisse-cathedrale",
+        use_filename: true,
+        unique_filename: true
+      },
+      (error, result) => {
+        if (error || !result) return reject(new HttpError(500, "Erreur upload Cloudinary"));
+        resolve({ url: result.secure_url, publicId: result.public_id });
+      }
+    );
+    uploadStream.end(buffer);
+  });
+};
 
 const uploadBody = z.object({
   title: z.string().min(2).max(180).optional(),
@@ -64,7 +105,12 @@ const uploadBody = z.object({
 uploadsRouter.get(
   "/",
   requireAuth,
-  validate({ query: paginationQuery.extend({ entityType: z.string().optional(), entityId: z.string().optional() }) }),
+  validate({
+    query: paginationQuery.extend({
+      entityType: z.string().optional(),
+      entityId: z.string().optional()
+    })
+  }),
   asyncHandler(async (req, res) => {
     const { page, limit, search, entityType, entityId } = req.query as unknown as {
       page: number;
@@ -104,10 +150,18 @@ uploadsRouter.post(
     if (!req.file) throw new HttpError(400, "Fichier requis");
 
     const body = uploadBody.parse(req.body);
+
+    // Upload vers Cloudinary (production) ou URL symbolique (dev)
+    const { url, publicId } = await uploadToCloudinary(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype
+    );
+
     const document = await prisma.document.create({
       data: {
         title: body.title ?? req.file.originalname,
-        url: `${env.API_URL}/uploads/${req.file.filename}`,
+        url,
         mimeType: req.file.mimetype,
         sizeBytes: req.file.size,
         entityType: body.entityType,
@@ -119,8 +173,9 @@ uploadsRouter.post(
     });
 
     await audit(req, "document.upload", "Document", document.id, {
-      filename: req.file.filename,
-      mimeType: req.file.mimetype
+      mimeType: req.file.mimetype,
+      sizeBytes: req.file.size,
+      cloudinaryPublicId: publicId ?? null
     });
 
     res.status(201).json({ document });
@@ -139,18 +194,28 @@ uploadsRouter.delete(
 
     await prisma.document.delete({ where: { id: document.id } });
 
-    // Protection path traversal : ne supprimer que dans le répertoire uploads
-    try {
-      const filename = path.basename(new URL(document.url).pathname);
-      // Validation stricte du nom de fichier (alphanum, tirets, underscores, point)
-      if (/^[\w\-.]+$/.test(filename)) {
-        const localPath = path.resolve(uploadsDirectory, filename);
-        // Vérification que le chemin résolu est bien dans uploadsDirectory
-        if (localPath.startsWith(path.resolve(uploadsDirectory) + path.sep) && existsSync(localPath)) {
-          unlinkSync(localPath);
+    // Supprimer depuis Cloudinary si configuré
+    const hasCloudinary =
+      env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET;
+
+    if (hasCloudinary) {
+      try {
+        const { v2: cloudinary } = await import("cloudinary");
+        cloudinary.config({
+          cloud_name: env.CLOUDINARY_CLOUD_NAME,
+          api_key: env.CLOUDINARY_API_KEY,
+          api_secret: env.CLOUDINARY_API_SECRET
+        });
+        // Extraire le public_id depuis l'URL Cloudinary
+        const urlParts = document.url.split("/upload/");
+        if (urlParts.length === 2) {
+          const publicId = urlParts[1].replace(/\.[^.]+$/, "");
+          await cloudinary.uploader.destroy(publicId);
         }
+      } catch (err) {
+        console.warn("[Upload] Impossible de supprimer depuis Cloudinary:", err);
       }
-    } catch { /* Le fichier distant (Cloudinary, etc.) n'est pas supprimé ici */ }
+    }
 
     await audit(req, "document.delete", "Document", document.id);
     res.status(204).send();

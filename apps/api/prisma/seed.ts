@@ -37,6 +37,7 @@ const main = async () => {
     prisma.sacredLesson.deleteMany(),
     prisma.sacredRhythm.deleteMany(),
     prisma.sacramentRecord.deleteMany(),
+    (prisma as any).catechumenDocument?.deleteMany() ?? Promise.resolve(),
     prisma.catechumen.deleteMany(),
     prisma.eventRegistration.deleteMany(),
     prisma.event.deleteMany(),

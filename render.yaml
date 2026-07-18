@@ -1,35 +1,99 @@
+# ═══════════════════════════════════════════════════════════════
+#  Cathédrale Saint Sauveur de Natitingou
+#  Configuration Render — Infrastructure as Code
+#  Déploiement : API (Web Service) + Base de données PostgreSQL
+# ═══════════════════════════════════════════════════════════════
+# Documentation : https://render.com/docs/blueprint-spec
+
 services:
+  # ── Service API (Backend Express) ──────────────────────────────
   - type: web
+    name: cathedrale-api
     runtime: node
-    name: paroisse-api
+    region: frankfurt
     plan: free
-    buildCommand: npm ci && npm run build --workspace apps/api
-    startCommand: npm run db:deploy --workspace apps/api && npm run start --workspace apps/api
+
+    # Commandes Render (sans Docker — build natif Node.js)
+    buildCommand: "npm ci && npm run build --workspace apps/api"
+    startCommand: "cd apps/api && npm run prisma:migrate && npm start"
+
     healthCheckPath: /health
+
     envVars:
-      - key: NODE_VERSION
-        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
       - key: DATABASE_URL
+        fromDatabase:
+          name: cathedrale-postgres
+          property: connectionString
+      # ⚠️  Définir ces secrets dans le dashboard Render :
+      # Dashboard → Service → Environment → Add Environment Variable
+      - key: JWT_ACCESS_SECRET
         sync: false
-      - key: WEB_URL
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: COOKIE_SECRET
         sync: false
       - key: CORS_ORIGINS
         sync: false
-      - key: JWT_ACCESS_SECRET
-        generateValue: true
-      - key: JWT_REFRESH_SECRET
-        generateValue: true
-      - key: COOKIE_SECRET
-        generateValue: true
-      - key: JWT_ACCESS_EXPIRES_IN
-        value: 15m
-      - key: JWT_REFRESH_EXPIRES_IN
-        value: 7d
-      - key: BCRYPT_ROUNDS
-        value: 12
-      - key: RATE_LIMIT_WINDOW_MS
-        value: 60000
-      - key: RATE_LIMIT_MAX
-        value: 120
+      - key: WEB_URL
+        sync: false
+      - key: API_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
       - key: MAIL_FROM
-        value: "Paroisse Cathedrale <noreply@paroisse.local>"
+        value: "Cathédrale Saint Sauveur <noreply@cathedrale-natitingou.org>"
+      - key: BCRYPT_ROUNDS
+        value: "12"
+      - key: RATE_LIMIT_MAX
+        value: "120"
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "60000"
+
+  # ── Service Web (Frontend Next.js) ─────────────────────────────
+  - type: web
+    name: cathedrale-web
+    runtime: node
+    region: frankfurt
+    plan: free
+
+    buildCommand: "npm ci && npm run build --workspace apps/web"
+    startCommand: "cd apps/web && npm start"
+
+    healthCheckPath: /
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # ⚠️  Remplacer par l'URL réelle du service API Render
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
+
+# ── Base de données PostgreSQL ────────────────────────────────────
+databases:
+  - name: cathedrale-postgres
+    region: frankfurt
+    plan: free
+    databaseName: parish_platform
+    ipAllowList: []
