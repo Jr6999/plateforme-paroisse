@@ -14,8 +14,9 @@ services:
     plan: free
 
     # Commandes Render (sans Docker — build natif Node.js)
-    buildCommand: "npm ci && npm run build --workspace apps/api"
-    startCommand: "cd apps/api && npm run prisma:migrate && npm start"
+    # Build uniquement l'API, pas le frontend Next.js
+    buildCommand: "npm ci && npm run build:api"
+    startCommand: "npm run db:migrate && npm run start:api"
 
     healthCheckPath: /health
 
@@ -72,8 +73,9 @@ services:
     region: frankfurt
     plan: free
 
-    buildCommand: "npm ci && npm run build --workspace apps/web"
-    startCommand: "cd apps/web && npm start"
+    # Build uniquement le frontend, pas l'API
+    buildCommand: "npm ci && npm run build:web"
+    startCommand: "npm run start:web"
 
     healthCheckPath: /
 
