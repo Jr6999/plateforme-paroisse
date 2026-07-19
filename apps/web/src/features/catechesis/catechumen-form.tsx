@@ -13,14 +13,26 @@ import { useAuthStore } from "@/store/auth-store";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000/api";
 
 const LEVELS = ["Niveau 1", "Niveau 2", "Niveau 3", "Adulte"];
-const SEX_OPTIONS = [{ value: "M", label: "Masculin" }, { value: "F", label: "Féminin" }];
-const STATUSES = [
-  { value: "ACTIVE", label: "Actif" },
-  { value: "PAUSED", label: "En pause" },
-  { value: "COMPLETED", label: "Terminé" },
-  { value: "ARCHIVED", label: "Archivé" },
+
+const SEX_OPTIONS = [
+  { value: "M" as const, label: "Masculin" },
+  { value: "F" as const, label: "Féminin" },
 ];
 
+const STATUSES = [
+  { value: "ACTIVE" as const, label: "Actif" },
+  { value: "PAUSED" as const, label: "En pause" },
+  { value: "COMPLETED" as const, label: "Terminé" },
+  { value: "ARCHIVED" as const, label: "Archivé" },
+];
+
+/**
+ * Tous les champs optionnels utilisent z.string().optional() sans .default().
+ * Les champs enum obligatoires (sex, status) n'utilisent PAS .default() pour éviter
+ * l'incompatibilité entre le type input Zod (optionnel avec default) et le type
+ * output (obligatoire) que React Hook Form + zodResolver ne réconcilie pas.
+ * La valeur par défaut est fournie directement dans `defaultValues`.
+ */
 const schema = z.object({
   firstName: z.string().min(2, "Prénom requis"),
   lastName: z.string().min(2, "Nom requis"),
@@ -28,7 +40,8 @@ const schema = z.object({
   birthDate: z.string().optional(),
   birthPlace: z.string().optional(),
   phone: z.string().optional(),
-  email: z.string().email("Email invalide").optional().or(z.literal("")),
+  // union string().email() | literal("") permet un champ email optionnel avec valeur vide
+  email: z.union([z.string().email("Email invalide"), z.literal("")]).optional(),
   address: z.string().optional(),
   neighborhood: z.string().optional(),
   profession: z.string().optional(),
@@ -43,9 +56,11 @@ const schema = z.object({
   guardianName: z.string().optional(),
   registrationDate: z.string().optional(),
   notes: z.string().optional(),
-  status: z.enum(["ACTIVE", "PAUSED", "COMPLETED", "ARCHIVED"]).default("ACTIVE"),
+  // Pas de .default() ici — la valeur par défaut est dans defaultValues
+  status: z.enum(["ACTIVE", "PAUSED", "COMPLETED", "ARCHIVED"]),
 });
 
+// Le type est strictement inféré du schéma — aucun type manuel
 type FormValues = z.infer<typeof schema>;
 
 type Props = {
@@ -57,7 +72,7 @@ type Props = {
 export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
   const { accessToken } = useAuthStore();
   const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(initial?.id ? null : null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [docFiles, setDocFiles] = useState<File[]>([]);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
@@ -69,7 +84,8 @@ export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
     defaultValues: {
       firstName: initial?.firstName ?? "",
       lastName: initial?.lastName ?? "",
-      sex: initial?.sex as "M" | "F" ?? "M",
+      // Valeur par défaut explicite — correspond exactement au type z.enum(["M","F"])
+      sex: initial?.sex ?? "M",
       birthDate: initial?.birthDate ?? "",
       birthPlace: initial?.birthPlace ?? "",
       phone: initial?.phone ?? "",
@@ -86,9 +102,11 @@ export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
       level: initial?.level ?? "Niveau 1",
       communityId: initial?.communityId ?? "",
       guardianName: initial?.guardianName ?? "",
-      registrationDate: initial?.registrationDate ?? new Date().toISOString().split("T")[0],
+      registrationDate:
+        initial?.registrationDate ?? new Date().toISOString().split("T")[0],
       notes: initial?.notes ?? "",
-      status: initial?.status as FormValues["status"] ?? "ACTIVE",
+      // Valeur par défaut explicite — correspond exactement au type enum
+      status: initial?.status ?? "ACTIVE",
     },
   });
 
@@ -111,15 +129,21 @@ export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
     }
 
     const endpoint = isEdit
-      ? `${API_URL}/catechumens/${initial.id}`
+      ? `${API_URL}/catechumens/${initial!.id}`
       : `${API_URL}/catechumens`;
     const method = isEdit ? "PATCH" : "POST";
 
     const body = {
       ...values,
-      birthDate: values.birthDate ? new Date(values.birthDate).toISOString() : undefined,
-      registrationDate: values.registrationDate ? new Date(values.registrationDate).toISOString() : undefined,
+      birthDate: values.birthDate
+        ? new Date(values.birthDate).toISOString()
+        : undefined,
+      registrationDate: values.registrationDate
+        ? new Date(values.registrationDate).toISOString()
+        : undefined,
+      // Envoyer undefined si vide pour ne pas passer une chaîne vide au backend
       email: values.email || undefined,
+      communityId: values.communityId || undefined,
     };
 
     try {
@@ -133,13 +157,14 @@ export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+        const err = await res.json().catch(() => ({})) as { error?: string };
         toast.error(err?.error ?? "Erreur lors de l'enregistrement.");
         return;
       }
 
-      const { catechumen } = await res.json();
-      toast.success(isEdit ? "Catéchumène mis à jour." : "Catéchumène enregistré avec succès.");
+      toast.success(
+        isEdit ? "Catéchumène mis à jour." : "Catéchumène enregistré avec succès."
+      );
       onSuccess?.();
     } catch {
       toast.error("Impossible de joindre le serveur.");
@@ -150,30 +175,42 @@ export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
 
   return (
     <form onSubmit={submit} className="space-y-8">
-      {/* Section : Identité */}
+      {/* ── Identité ─────────────────────────────────────── */}
       <fieldset className="space-y-4">
         <legend className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Identité
         </legend>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1">
-            <label className="text-sm font-medium">Nom <span className="text-destructive">*</span></label>
+            <label className="text-sm font-medium">
+              Nom <span className="text-destructive">*</span>
+            </label>
             <Input placeholder="Nom de famille" {...form.register("lastName")} />
-            {errors.lastName && <p className="text-xs text-destructive">{errors.lastName.message}</p>}
+            {errors.lastName && (
+              <p className="text-xs text-destructive">{errors.lastName.message}</p>
+            )}
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Prénom <span className="text-destructive">*</span></label>
+            <label className="text-sm font-medium">
+              Prénom <span className="text-destructive">*</span>
+            </label>
             <Input placeholder="Prénom" {...form.register("firstName")} />
-            {errors.firstName && <p className="text-xs text-destructive">{errors.firstName.message}</p>}
+            {errors.firstName && (
+              <p className="text-xs text-destructive">{errors.firstName.message}</p>
+            )}
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Sexe <span className="text-destructive">*</span></label>
+            <label className="text-sm font-medium">
+              Sexe <span className="text-destructive">*</span>
+            </label>
             <select
               {...form.register("sex")}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               {SEX_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
               ))}
             </select>
           </div>
@@ -187,12 +224,15 @@ export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Situation matrimoniale</label>
-            <Input placeholder="Célibataire, marié(e)…" {...form.register("maritalStatus")} />
+            <Input
+              placeholder="Célibataire, marié(e)…"
+              {...form.register("maritalStatus")}
+            />
           </div>
         </div>
       </fieldset>
 
-      {/* Section : Coordonnées */}
+      {/* ── Coordonnées ──────────────────────────────────── */}
       <fieldset className="space-y-4">
         <legend className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Coordonnées
@@ -204,8 +244,14 @@ export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Email</label>
-            <Input type="email" placeholder="email@exemple.com" {...form.register("email")} />
-            {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+            <Input
+              type="email"
+              placeholder="email@exemple.com"
+              {...form.register("email")}
+            />
+            {errors.email && (
+              <p className="text-xs text-destructive">{errors.email.message}</p>
+            )}
           </div>
           <div className="space-y-1 sm:col-span-2">
             <label className="text-sm font-medium">Adresse</label>
@@ -221,15 +267,18 @@ export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Niveau d'études</label>
-            <Input placeholder="Primaire, secondaire, universitaire…" {...form.register("educationLevel")} />
+            <Input
+              placeholder="Primaire, secondaire, universitaire…"
+              {...form.register("educationLevel")}
+            />
           </div>
         </div>
       </fieldset>
 
-      {/* Section : Famille */}
+      {/* ── Famille & Urgence ────────────────────────────── */}
       <fieldset className="space-y-4">
         <legend className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Famille & Contact d'urgence
+          Famille &amp; Contact d&apos;urgence
         </legend>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1">
@@ -242,35 +291,45 @@ export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Tuteur / Responsable légal</label>
-            <Input placeholder="Nom du tuteur (si mineur)" {...form.register("guardianName")} />
+            <Input
+              placeholder="Nom du tuteur (si mineur)"
+              {...form.register("guardianName")}
+            />
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Personne à contacter</label>
             <Input placeholder="Nom complet" {...form.register("emergencyContact")} />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Téléphone d'urgence</label>
+            <label className="text-sm font-medium">Téléphone d&apos;urgence</label>
             <Input placeholder="+229 …" {...form.register("emergencyPhone")} />
           </div>
         </div>
       </fieldset>
 
-      {/* Section : Catéchèse */}
+      {/* ── Parcours catéchétique ────────────────────────── */}
       <fieldset className="space-y-4">
         <legend className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Parcours catéchétique
         </legend>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1">
-            <label className="text-sm font-medium">Niveau <span className="text-destructive">*</span></label>
+            <label className="text-sm font-medium">
+              Niveau <span className="text-destructive">*</span>
+            </label>
             <select
               {...form.register("level")}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               {LEVELS.map((l) => (
-                <option key={l} value={l}>{l}</option>
+                <option key={l} value={l}>
+                  {l}
+                </option>
               ))}
             </select>
+            {errors.level && (
+              <p className="text-xs text-destructive">{errors.level.message}</p>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Statut</label>
@@ -279,18 +338,20 @@ export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             >
               {STATUSES.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
               ))}
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Date d'inscription</label>
+            <label className="text-sm font-medium">Date d&apos;inscription</label>
             <Input type="date" {...form.register("registrationDate")} />
           </div>
         </div>
       </fieldset>
 
-      {/* Section : Photo */}
+      {/* ── Photo ────────────────────────────────────────── */}
       <fieldset className="space-y-4">
         <legend className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Photo
@@ -299,47 +360,84 @@ export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
           {photoPreview && (
             <div className="relative h-20 w-20 overflow-hidden rounded-full border border-border">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoPreview} alt="Aperçu photo" className="h-full w-full object-cover" />
+              <img
+                src={photoPreview}
+                alt="Aperçu photo"
+                className="h-full w-full object-cover"
+              />
               <button
                 type="button"
-                onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
+                onClick={() => {
+                  setPhotoFile(null);
+                  setPhotoPreview(null);
+                }}
                 className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-white"
               >
                 <X className="h-3 w-3" />
               </button>
             </div>
           )}
-          <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-          <Button type="button" variant="outline" size="sm" onClick={() => photoInputRef.current?.click()}>
-            <Upload className="h-4 w-4 mr-2" />
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoChange}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => photoInputRef.current?.click()}
+          >
+            <Upload className="mr-2 h-4 w-4" />
             {photoPreview ? "Changer la photo" : "Ajouter une photo"}
           </Button>
         </div>
       </fieldset>
 
-      {/* Section : Documents */}
+      {/* ── Documents ────────────────────────────────────── */}
       <fieldset className="space-y-4">
         <legend className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Pièces justificatives
         </legend>
         <div className="space-y-2">
           {docFiles.map((f, i) => (
-            <div key={i} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-              <span className="text-sm truncate">{f.name}</span>
-              <button type="button" onClick={() => setDocFiles((prev) => prev.filter((_, j) => j !== i))}>
+            <div
+              key={i}
+              className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
+            >
+              <span className="truncate text-sm">{f.name}</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setDocFiles((prev) => prev.filter((_, j) => j !== i))
+                }
+              >
                 <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
               </button>
             </div>
           ))}
-          <input ref={docInputRef} type="file" multiple className="hidden" onChange={handleDocChange} />
-          <Button type="button" variant="outline" size="sm" onClick={() => docInputRef.current?.click()}>
-            <Upload className="h-4 w-4 mr-2" />
+          <input
+            ref={docInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={handleDocChange}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => docInputRef.current?.click()}
+          >
+            <Upload className="mr-2 h-4 w-4" />
             Ajouter des documents
           </Button>
         </div>
       </fieldset>
 
-      {/* Section : Observations */}
+      {/* ── Observations ─────────────────────────────────── */}
       <fieldset className="space-y-2">
         <legend className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Observations
@@ -352,7 +450,7 @@ export const CatechumenForm = ({ onSuccess, onCancel, initial }: Props) => {
         />
       </fieldset>
 
-      {/* Actions */}
+      {/* ── Actions ──────────────────────────────────────── */}
       <div className="flex gap-3">
         <Button type="submit" variant="gold" disabled={form.formState.isSubmitting}>
           {form.formState.isSubmitting ? (
