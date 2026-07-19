@@ -17,7 +17,6 @@ export const uploadsRouter = Router();
 /**
  * Répertoire uploads local — utilisé uniquement en développement.
  * En production (Render / Koyeb / Railway), les fichiers sont envoyés vers Cloudinary.
- * Cette valeur est conservée pour la compatibilité avec app.ts (express.static).
  */
 export const uploadsDirectory = path.resolve(process.cwd(), "uploads");
 
@@ -32,14 +31,11 @@ const allowedMimeTypes = new Set([
 ]);
 
 /**
- * Utilise memoryStorage en production pour éviter l'écriture disque éphémère.
- * Les fichiers en mémoire sont ensuite transférés vers Cloudinary.
- * En développement, diskStorage peut être utilisé localement.
+ * memoryStorage : aucun fichier écrit sur disque.
+ * Obligatoire en production (filesystem éphémère sur Render / Koyeb).
  */
-const storage = multer.memoryStorage();
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 Mo max
   fileFilter: (_req, file, callback) => {
     if (!allowedMimeTypes.has(file.mimetype)) {
@@ -49,8 +45,13 @@ const upload = multer({
   }
 });
 
+type CloudinaryUploadResult = {
+  secure_url: string;
+  public_id: string;
+};
+
 /**
- * Upload vers Cloudinary si configuré, sinon retourne une URL temporaire.
+ * Upload vers Cloudinary si configuré, sinon retourne une URL symbolique (dev).
  */
 const uploadToCloudinary = async (
   buffer: Buffer,
@@ -61,15 +62,16 @@ const uploadToCloudinary = async (
     env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET;
 
   if (!hasCloudinary) {
-    // Mode développement : stocker en mémoire et retourner une URL symbolique
     console.warn("[Upload] Cloudinary non configuré — fichier non persisté en production");
     const ext = path.extname(filename).toLowerCase();
     const base = toSlug(path.basename(filename, ext)) || "document";
     return { url: `${env.API_URL}/uploads/${base}-${Date.now().toString(36)}${ext}` };
   }
 
-  // Cloudinary SDK via import dynamique pour éviter une dépendance obligatoire
-  const { v2: cloudinary } = await import("cloudinary");
+  // Import dynamique pour éviter une dépendance obligatoire quand Cloudinary n'est pas configuré
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { v2: cloudinary } = (await import("cloudinary")) as { v2: any };
+
   cloudinary.config({
     cloud_name: env.CLOUDINARY_CLOUD_NAME,
     api_key: env.CLOUDINARY_API_KEY,
@@ -77,17 +79,19 @@ const uploadToCloudinary = async (
     secure: true
   });
 
-  return new Promise((resolve, reject) => {
+  return new Promise<{ url: string; publicId?: string }>((resolve, reject) => {
     const isImage = mimeType.startsWith("image/");
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         resource_type: isImage ? "image" : "raw",
-        folder: "paroisse-cathedrale",
+        folder: "cathedrale-saint-sauveur",
         use_filename: true,
         unique_filename: true
       },
-      (error, result) => {
-        if (error || !result) return reject(new HttpError(500, "Erreur upload Cloudinary"));
+      (error: Error | undefined, result: CloudinaryUploadResult | undefined) => {
+        if (error || !result) {
+          return reject(new HttpError(500, "Erreur upload Cloudinary"));
+        }
         resolve({ url: result.secure_url, publicId: result.public_id });
       }
     );
@@ -151,7 +155,6 @@ uploadsRouter.post(
 
     const body = uploadBody.parse(req.body);
 
-    // Upload vers Cloudinary (production) ou URL symbolique (dev)
     const { url, publicId } = await uploadToCloudinary(
       req.file.buffer,
       req.file.originalname,
@@ -194,19 +197,18 @@ uploadsRouter.delete(
 
     await prisma.document.delete({ where: { id: document.id } });
 
-    // Supprimer depuis Cloudinary si configuré
     const hasCloudinary =
       env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET;
 
     if (hasCloudinary) {
       try {
-        const { v2: cloudinary } = await import("cloudinary");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { v2: cloudinary } = (await import("cloudinary")) as { v2: any };
         cloudinary.config({
           cloud_name: env.CLOUDINARY_CLOUD_NAME,
           api_key: env.CLOUDINARY_API_KEY,
           api_secret: env.CLOUDINARY_API_SECRET
         });
-        // Extraire le public_id depuis l'URL Cloudinary
         const urlParts = document.url.split("/upload/");
         if (urlParts.length === 2) {
           const publicId = urlParts[1].replace(/\.[^.]+$/, "");

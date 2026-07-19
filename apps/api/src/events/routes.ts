@@ -11,7 +11,11 @@ import { prisma } from "../prisma/client.js";
 
 export const eventsRouter = Router();
 
-const eventBody = z.object({
+/**
+ * Schéma de base sans .refine() pour pouvoir appeler .partial() sur PATCH.
+ * La validation croisée endAt > startAt est appliquée manuellement dans le handler POST.
+ */
+const eventBodyBase = z.object({
   title: z.string().min(3).max(180),
   description: z.string().min(20),
   status: z.enum(["DRAFT", "SCHEDULED", "LIVE", "COMPLETED", "CANCELLED"]).default("SCHEDULED"),
@@ -24,10 +28,16 @@ const eventBody = z.object({
   livestreamUrl: z.string().url().optional(),
   categoryId: z.string().optional(),
   communityId: z.string().optional()
-}).refine(
+});
+
+// Schéma avec validation croisée — utilisé uniquement pour POST (création)
+const eventBodyCreate = eventBodyBase.refine(
   (data) => !data.endAt || data.endAt > data.startAt,
   { message: "La date de fin doit être postérieure à la date de début", path: ["endAt"] }
 );
+
+// Schéma partiel pour PATCH (update) — .partial() ne fonctionne pas sur ZodEffects
+const eventBodyUpdate = eventBodyBase.partial();
 
 eventsRouter.get(
   "/",
@@ -50,7 +60,9 @@ eventsRouter.get(
 
     const where = {
       ...(status ? { status } : {}),
-      ...(from || to ? { startAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
+      ...(from || to
+        ? { startAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+        : {}),
       ...(search
         ? {
             OR: [
@@ -105,7 +117,7 @@ eventsRouter.post(
   "/",
   requireAuth,
   requireRoles(["administrateur", "responsable_communautaire"]),
-  validate({ body: eventBody }),
+  validate({ body: eventBodyCreate }),
   asyncHandler(async (req, res) => {
     const event = await prisma.event.create({
       data: {
@@ -126,7 +138,10 @@ eventsRouter.post(
   requireAuth,
   validate({
     params: z.object({ id: z.string().min(1) }),
-    body: z.object({ guests: z.number().int().min(0).default(0), note: z.string().max(400).optional() })
+    body: z.object({
+      guests: z.number().int().min(0).default(0),
+      note: z.string().max(400).optional()
+    })
   }),
   asyncHandler(async (req, res) => {
     const authed = req as AuthedRequest;
@@ -150,14 +165,19 @@ eventsRouter.patch(
   "/:id",
   requireAuth,
   requireRoles(["administrateur", "responsable_communautaire"]),
-  validate({ params: z.object({ id: z.string().min(1) }), body: eventBody.partial() }),
+  validate({ params: z.object({ id: z.string().min(1) }), body: eventBodyUpdate }),
   asyncHandler(async (req, res) => {
     const { id } = req.params as { id: string };
+
+    // Validation croisée manuelle pour PATCH (endAt > startAt si les deux sont fournis)
+    if (req.body.endAt && req.body.startAt && req.body.endAt <= req.body.startAt) {
+      res.status(400).json({ error: "La date de fin doit être postérieure à la date de début" });
+      return;
+    }
 
     const data = { ...req.body };
     if (data.title) {
       data.title = sanitizeText(data.title);
-      // Regénère le slug uniquement si le titre change
       data.slug = uniqueSlug(data.title);
     }
     if (data.description) data.description = sanitizeText(data.description);
