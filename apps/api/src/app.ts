@@ -26,73 +26,111 @@ import { sacredRhythmsRouter } from "./sacred-rhythms/routes.js";
 import { uploadsDirectory, uploadsRouter } from "./uploads/routes.js";
 import { usersRouter } from "./users/routes.js";
 
+// ── Swagger ───────────────────────────────────────────────────────────────────
 const swaggerSpec = swaggerJSDoc({
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "API Cathédrale Saint Sauveur de Natitingou",
-      version: "0.1.0",
+      title: "Plateforme Paroissiale Cathédrale — API",
+      version: "1.0.0",
       description:
-        "API REST pour la gestion historique, communautaire, catéchétique et administrative de la Cathédrale Saint Sauveur de Natitingou, Bénin."
+        "API REST pour la gestion historique, communautaire, catéchétique et administrative de la Cathédrale Saint Sauveur de Natitingou, Bénin.",
+      contact: {
+        name: "Support technique",
+        email: "noreply@cathedrale-natitingou.bj"
+      }
     },
-    servers: [{ url: `${env.API_URL}/api` }],
+    servers: [
+      {
+        url: `${env.API_URL}/api`,
+        description: env.NODE_ENV === "production" ? "Production" : "Développement local"
+      }
+    ],
     components: {
       securitySchemes: {
         bearerAuth: {
           type: "http",
           scheme: "bearer",
-          bearerFormat: "JWT"
+          bearerFormat: "JWT",
+          description: "JWT access token obtenu via POST /api/auth/login"
         }
       }
     },
     tags: [
-      { name: "auth" },
-      { name: "users" },
-      { name: "announcements" },
-      { name: "comments" },
-      { name: "events" },
-      { name: "communities" },
-      { name: "catechumens" },
-      { name: "attendance" },
-      { name: "sacred-rhythms" },
-      { name: "history" },
-      { name: "leaders" },
-      { name: "notifications" }
+      { name: "auth", description: "Authentification et gestion des sessions" },
+      { name: "users", description: "Gestion des utilisateurs" },
+      { name: "announcements", description: "Annonces paroissiales" },
+      { name: "comments", description: "Commentaires et réactions" },
+      { name: "events", description: "Événements paroissiaux" },
+      { name: "communities", description: "Communautés et mouvements" },
+      { name: "catechumens", description: "Gestion des catéchumènes" },
+      { name: "attendance", description: "Présences et absences" },
+      { name: "sacred-rhythms", description: "Rythmes sacrés et catéchèse" },
+      { name: "history", description: "Histoire de la paroisse" },
+      { name: "leaders", description: "Dirigeants et responsables" },
+      { name: "notifications", description: "Notifications utilisateur" },
+      { name: "uploads", description: "Upload de documents et médias" },
+      { name: "analytics", description: "Tableau de bord et statistiques" }
     ]
   },
   apis: ["./src/**/*.ts"]
 });
 
+// ── App factory ───────────────────────────────────────────────────────────────
 export const createApp = () => {
   const app = express();
 
+  // Render / Nginx reverse proxy
   app.set("trust proxy", 1);
+
+  // ── Sécurité ─────────────────────────────────────────────────────────────
   app.use(
     helmet({
-      crossOriginResourcePolicy: { policy: "cross-origin" }
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+      // Désactiver Content-Security-Policy pour Swagger UI (styles inline)
+      contentSecurityPolicy:
+        env.NODE_ENV === "production"
+          ? {
+              directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-inline'"], // requis pour Swagger UI
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                imgSrc: ["'self'", "data:", "https:"]
+              }
+            }
+          : false
     })
   );
+
   app.use(compression());
   app.use(cookieParser(env.COOKIE_SECRET));
+
+  // ── CORS ─────────────────────────────────────────────────────────────────
   app.use(
     cors({
       origin(origin, callback) {
+        // Autoriser les requêtes sans origine (curl, Postman, Swagger)
         if (!origin || corsOrigins.includes(origin)) return callback(null, true);
-        return callback(new Error("Origine CORS non autorisee"));
+        return callback(new Error(`Origine CORS non autorisée : ${origin}`));
       },
-      credentials: true
+      credentials: true,
+      methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
     })
   );
+
+  // ── Rate limiting global ──────────────────────────────────────────────────
   app.use(
     rateLimit({
       windowMs: env.RATE_LIMIT_WINDOW_MS,
       limit: env.RATE_LIMIT_MAX,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
+      message: { error: "Trop de requêtes. Réessayez dans quelques instants." }
     })
   );
 
-  // Rate limit renforcé sur les routes d'authentification (anti-brute-force)
+  // Rate limit renforcé sur auth (anti-brute-force)
   const authRateLimit = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     limit: 20,
@@ -100,22 +138,73 @@ export const createApp = () => {
     legacyHeaders: false,
     message: { error: "Trop de tentatives de connexion. Réessayez dans 15 minutes." }
   });
+
+  // ── Body parsing ─────────────────────────────────────────────────────────
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ extended: true, limit: "2mb" }));
-  // Morgan : logs JSON en production (stdout/stderr pour Render/Railway/Koyeb)
-  // Utiliser "combined" en production pour compatibilité avec les outils de monitoring
+
+  // ── Logging ──────────────────────────────────────────────────────────────
+  // "combined" en production pour compatibilité monitoring (Render, Datadog, etc.)
   app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
-  // Servir les uploads locaux uniquement en développement
+
+  // Uploads locaux uniquement en dev (prod → Cloudinary)
   if (env.NODE_ENV !== "production") {
     app.use("/uploads", express.static(uploadsDirectory));
   }
 
-  app.get("/health", (_req, res) => {
-    res.json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });
+  // ── Route racine ─────────────────────────────────────────────────────────
+  // Corrige le 404 sur GET / observé sur Render
+  app.get("/", (_req, res) => {
+    res.json({
+      name: "Plateforme Paroissiale Cathédrale",
+      description: "Cathédrale Saint Sauveur de Natitingou — API REST",
+      status: "API opérationnelle",
+      environment: env.NODE_ENV,
+      version: "1.0.0",
+      docs: `${env.API_URL}/docs`,
+      health: `${env.API_URL}/health`
+    });
   });
 
-  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  // ── Health check ─────────────────────────────────────────────────────────
+  // Vérifie la connexion DB — compatible Render Health Check
+  app.get(
+    "/health",
+    asyncHandler(async (_req, res) => {
+      let dbStatus: "connected" | "error" = "connected";
+      let dbLatencyMs: number | null = null;
 
+      try {
+        const start = Date.now();
+        await prisma.$queryRaw`SELECT 1`;
+        dbLatencyMs = Date.now() - start;
+      } catch {
+        dbStatus = "error";
+      }
+
+      const status = dbStatus === "connected" ? "ok" : "degraded";
+      res.status(dbStatus === "connected" ? 200 : 503).json({
+        status,
+        database: dbStatus,
+        dbLatencyMs,
+        uptime: Math.round(process.uptime()),
+        timestamp: new Date().toISOString(),
+        environment: env.NODE_ENV,
+        version: "1.0.0"
+      });
+    })
+  );
+
+  // ── Swagger UI ───────────────────────────────────────────────────────────
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    swaggerOptions: {
+      persistAuthorization: true,
+      displayRequestDuration: true
+    },
+    customSiteTitle: "Cathédrale Saint Sauveur — API Docs"
+  }));
+
+  // ── Routes API ───────────────────────────────────────────────────────────
   const api = express.Router();
   api.use("/auth", authRateLimit, authRouter);
   api.use("/users", usersRouter);
@@ -131,11 +220,15 @@ export const createApp = () => {
   api.use("/notifications", notificationsRouter);
   api.use("/uploads", uploadsRouter);
   api.use("/analytics", analyticsRouter);
+
+  // Recherche globale full-text
   api.get(
     "/search",
     asyncHandler(async (req, res) => {
       const q = String(req.query.q ?? "").trim();
-      if (q.length < 2) return res.json({ announcements: [], events: [], communities: [], history: [] });
+      if (q.length < 2) {
+        return res.json({ announcements: [], events: [], communities: [], history: [] });
+      }
 
       const [announcements, events, communities, history] = await Promise.all([
         prisma.announcement.findMany({
@@ -146,6 +239,7 @@ export const createApp = () => {
               { excerpt: { contains: q, mode: "insensitive" } }
             ]
           },
+          select: { id: true, title: true, slug: true, category: true },
           take: 8
         }),
         prisma.event.findMany({
@@ -155,6 +249,7 @@ export const createApp = () => {
               { description: { contains: q, mode: "insensitive" } }
             ]
           },
+          select: { id: true, title: true, slug: true, location: true },
           take: 8
         }),
         prisma.community.findMany({
@@ -165,6 +260,7 @@ export const createApp = () => {
               { mission: { contains: q, mode: "insensitive" } }
             ]
           },
+          select: { id: true, name: true, slug: true, mission: true },
           take: 8
         }),
         prisma.parishHistory.findMany({
@@ -175,6 +271,7 @@ export const createApp = () => {
               { description: { contains: q, mode: "insensitive" } }
             ]
           },
+          select: { id: true, title: true, slug: true, period: true },
           take: 8
         })
       ]);
@@ -184,6 +281,8 @@ export const createApp = () => {
   );
 
   app.use("/api", api);
+
+  // ── Gestion des erreurs globale ──────────────────────────────────────────
   app.use(errorHandler);
 
   return app;

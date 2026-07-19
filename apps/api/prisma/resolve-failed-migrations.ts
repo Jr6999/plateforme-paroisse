@@ -1,93 +1,201 @@
 /**
  * Script de résolution des migrations Prisma échouées en production.
- * Exécuté avant `prisma migrate deploy` via le Start Command Render.
  *
- * Cas traité : migration 20260718000000_catechumen_extended_fields
- * marquée "failed" dans _prisma_migrations alors que les colonnes
- * ont déjà été créées partiellement ou totalement.
+ * Usage :
+ *   tsx prisma/resolve-failed-migrations.ts           # exécution normale
+ *   tsx prisma/resolve-failed-migrations.ts --dry-run # simulation sans modification
  *
- * Stratégie :
- * 1. Vérifier si la migration est marquée "failed"
- * 2. Vérifier si les colonnes cibles existent déjà en DB
- * 3. Si colonnes présentes → marquer la migration comme "applied"
- * 4. Si colonnes absentes → supprimer l'entrée failed pour laisser
- *    prisma migrate deploy la rejouer proprement
+ * Protections :
+ *   - Fonctionne en production ET en développement (avec avertissement)
+ *   - Mode --dry-run pour simuler sans modifier la DB
+ *   - Logs explicites à chaque étape
+ *   - Vérifie l'état réel de la DB avant toute action
+ *   - Ne supprime JAMAIS une migration sans vérification préalable
  */
 
 import { PrismaClient } from "@prisma/client";
 
+const isDryRun = process.argv.includes("--dry-run");
 const prisma = new PrismaClient();
 
-const MIGRATION_NAME = "20260718000000_catechumen_extended_fields";
-
-async function main() {
-  console.log("[resolve] Vérification des migrations échouées…");
-
-  // Vérifier si la migration est marquée failed
-  const failed = await prisma.$queryRaw<{ migration_name: string; finished_at: Date | null }[]>`
-    SELECT migration_name, finished_at
-    FROM "_prisma_migrations"
-    WHERE migration_name = ${MIGRATION_NAME}
-      AND finished_at IS NULL
-  `;
-
-  if (failed.length === 0) {
-    console.log("[resolve] Aucune migration échouée détectée — rien à faire.");
-    return;
+// Liste des migrations susceptibles d'être dans un état "failed"
+// et leur condition de résolution associée
+const MIGRATIONS_TO_CHECK = [
+  {
+    name: "20260718000000_catechumen_extended_fields",
+    // Colonne témoin : si elle existe, la migration a été (au moins partiellement) appliquée
+    checkColumn: {
+      table: "Catechumen",
+      column: "birthplace" // PostgreSQL stocke les noms de colonnes en minuscules
+    },
+    // Table témoin : si elle existe, la partie CREATE TABLE a été appliquée
+    checkTable: "CatechumenDocument"
   }
+] as const;
 
-  console.log(`[resolve] Migration échouée trouvée : ${MIGRATION_NAME}`);
+type MigrationRow = {
+  migration_name: string;
+  finished_at: Date | null;
+  logs: string | null;
+  applied_steps_count: number;
+};
 
-  // Vérifier si la colonne birthPlace existe déjà (indicateur que la migration a été partiellement appliquée)
-  const columnExists = await prisma.$queryRaw<{ exists: boolean }[]>`
+async function checkMigrationStatus(name: string): Promise<MigrationRow | null> {
+  const rows = await prisma.$queryRaw<MigrationRow[]>`
+    SELECT migration_name, finished_at, logs, applied_steps_count
+    FROM "_prisma_migrations"
+    WHERE migration_name = ${name}
+  `;
+  return rows[0] ?? null;
+}
+
+async function columnExists(table: string, column: string): Promise<boolean> {
+  const rows = await prisma.$queryRaw<{ exists: boolean }[]>`
     SELECT EXISTS (
       SELECT 1
       FROM information_schema.columns
-      WHERE table_name = 'Catechumen'
-        AND column_name = 'birthPlace'
+      WHERE table_schema = 'public'
+        AND lower(table_name)  = lower(${table})
+        AND lower(column_name) = lower(${column})
     ) AS "exists"
   `;
+  return rows[0]?.exists ?? false;
+}
 
-  const tableExists = await prisma.$queryRaw<{ exists: boolean }[]>`
+async function tableExists(table: string): Promise<boolean> {
+  const rows = await prisma.$queryRaw<{ exists: boolean }[]>`
     SELECT EXISTS (
       SELECT 1
       FROM information_schema.tables
-      WHERE table_name = 'CatechumenDocument'
+      WHERE table_schema = 'public'
+        AND lower(table_name) = lower(${table})
     ) AS "exists"
   `;
+  return rows[0]?.exists ?? false;
+}
 
-  const colExists = columnExists[0]?.exists ?? false;
-  const tblExists = tableExists[0]?.exists ?? false;
-
-  if (colExists && tblExists) {
-    // Les changements sont déjà en base → marquer la migration comme applied
-    console.log("[resolve] Colonnes et table présentes → marquage de la migration comme applied…");
-    await prisma.$executeRaw`
-      UPDATE "_prisma_migrations"
-      SET
-        finished_at     = NOW(),
-        applied_steps_count = 1,
-        logs            = NULL
-      WHERE migration_name = ${MIGRATION_NAME}
-        AND finished_at IS NULL
-    `;
-    console.log("[resolve] ✓ Migration marquée comme applied.");
+function log(level: "info" | "warn" | "error" | "success", message: string) {
+  const prefix = {
+    info: "[resolve] ℹ",
+    warn: "[resolve] ⚠",
+    error: "[resolve] ✗",
+    success: "[resolve] ✓"
+  }[level];
+  if (level === "error") {
+    console.error(`${prefix} ${message}`);
   } else {
-    // Les changements ne sont pas en base → supprimer l'entrée failed
-    // pour que prisma migrate deploy puisse rejouer la migration proprement
-    console.log("[resolve] Colonnes absentes → suppression de l'entrée failed pour permettre le rejeu…");
-    await prisma.$executeRaw`
-      DELETE FROM "_prisma_migrations"
-      WHERE migration_name = ${MIGRATION_NAME}
-        AND finished_at IS NULL
-    `;
-    console.log("[resolve] ✓ Entrée supprimée — prisma migrate deploy peut s'exécuter.");
+    console.log(`${prefix} ${message}`);
+  }
+}
+
+async function main() {
+  if (isDryRun) {
+    log("warn", "=== MODE DRY-RUN : aucune modification ne sera effectuée ===");
+  }
+
+  log("info", `Environnement : ${process.env.NODE_ENV ?? "non défini"}`);
+  log("info", "Vérification des migrations Prisma…");
+
+  // Vérifier que la table _prisma_migrations existe
+  const prismaTableExists = await tableExists("_prisma_migrations");
+  if (!prismaTableExists) {
+    log("info", "Table _prisma_migrations absente — base de données vierge. Rien à résoudre.");
+    return;
+  }
+
+  let resolvedCount = 0;
+  let skippedCount = 0;
+
+  for (const migration of MIGRATIONS_TO_CHECK) {
+    log("info", `Vérification : ${migration.name}`);
+
+    const row = await checkMigrationStatus(migration.name);
+
+    if (!row) {
+      log("info", `→ Migration absente de _prisma_migrations — prisma migrate deploy l'appliquera.`);
+      skippedCount++;
+      continue;
+    }
+
+    if (row.finished_at !== null) {
+      log("success", `→ Migration déjà appliquée (finished_at: ${row.finished_at.toISOString()}).`);
+      skippedCount++;
+      continue;
+    }
+
+    // Migration trouvée avec finished_at = NULL → état "failed" ou "pending"
+    log("warn", `→ Migration en état échoué/incomplet détectée.`);
+    if (row.logs) {
+      log("warn", `→ Logs d'erreur : ${row.logs.substring(0, 200)}…`);
+    }
+
+    // Vérifier l'état réel de la base de données
+    const colExists = await columnExists(
+      migration.checkColumn.table,
+      migration.checkColumn.column
+    );
+    const tblExists = await tableExists(migration.checkTable);
+
+    log("info", `→ Colonne ${migration.checkColumn.table}.${migration.checkColumn.column} : ${colExists ? "présente" : "absente"}`);
+    log("info", `→ Table ${migration.checkTable} : ${tblExists ? "présente" : "absente"}`);
+
+    if (colExists && tblExists) {
+      // Les changements sont en DB → marquer comme applied
+      log("warn", `→ Changements déjà appliqués en DB. Marquage de la migration comme "applied"…`);
+
+      if (isDryRun) {
+        log("warn", `[DRY-RUN] UPDATE _prisma_migrations SET finished_at=NOW() WHERE migration_name='${migration.name}'`);
+      } else {
+        await prisma.$executeRaw`
+          UPDATE "_prisma_migrations"
+          SET
+            finished_at         = NOW(),
+            applied_steps_count = 1,
+            logs                = NULL
+          WHERE migration_name = ${migration.name}
+            AND finished_at IS NULL
+        `;
+        log("success", `→ Migration marquée comme applied avec succès.`);
+      }
+      resolvedCount++;
+    } else if (!colExists && !tblExists) {
+      // Rien n'a été appliqué → supprimer l'entrée failed pour permettre le rejeu
+      log("warn", `→ Aucun changement en DB. Suppression de l'entrée failed pour permettre le rejeu…`);
+
+      if (isDryRun) {
+        log("warn", `[DRY-RUN] DELETE FROM _prisma_migrations WHERE migration_name='${migration.name}'`);
+      } else {
+        await prisma.$executeRaw`
+          DELETE FROM "_prisma_migrations"
+          WHERE migration_name = ${migration.name}
+            AND finished_at IS NULL
+        `;
+        log("success", `→ Entrée supprimée. prisma migrate deploy pourra rejouer la migration.`);
+      }
+      resolvedCount++;
+    } else {
+      // État partiellement appliqué — situation ambiguë, ne pas agir automatiquement
+      log("error", `→ État PARTIELLEMENT appliqué détecté (col: ${colExists}, tbl: ${tblExists}).`);
+      log("error", `→ Intervention manuelle requise.`);
+      log("error", `→ Commande Prisma : npx prisma migrate resolve --applied ${migration.name}`);
+      log("error", `→ Ou pour rejeu  : npx prisma migrate resolve --rolled-back ${migration.name}`);
+      process.exit(1);
+    }
+  }
+
+  if (isDryRun) {
+    log("warn", `=== DRY-RUN terminé : ${resolvedCount} résolution(s) simulée(s), ${skippedCount} ignorée(s) ===`);
+  } else {
+    log("success", `Résolution terminée : ${resolvedCount} migration(s) résolue(s), ${skippedCount} ignorée(s).`);
   }
 }
 
 main()
   .catch((err) => {
-    console.error("[resolve] Erreur :", err);
+    log("error", `Erreur inattendue : ${err instanceof Error ? err.message : String(err)}`);
+    if (process.env.NODE_ENV === "development" && err instanceof Error) {
+      console.error(err.stack);
+    }
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
