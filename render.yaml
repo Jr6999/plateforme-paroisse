@@ -1,36 +1,48 @@
 # ═══════════════════════════════════════════════════════════════
 #  Cathédrale Saint Sauveur de Natitingou
 #  Configuration Render — Infrastructure as Code
-#  Déploiement : API (Web Service) + Base de données PostgreSQL
+#  Monorepo npm workspaces : apps/api (Express) + apps/web (Next.js)
 # ═══════════════════════════════════════════════════════════════
-# Documentation : https://render.com/docs/blueprint-spec
+#
+#  IMPORTANT — Configuration du dashboard Render :
+#  ─────────────────────────────────────────────────────────────
+#  Service API :
+#    Build Command : npm ci && npm run build:api
+#    Start Command : npm run prisma:migrate && npm start
+#    Root Directory : (laisser VIDE — Render exécute depuis la racine)
+#
+#  Service Web :
+#    Build Command : npm ci && npm run build:web
+#    Start Command : npm run start:web
+#    Root Directory : (laisser VIDE)
+#
+#  Documentation : https://render.com/docs/blueprint-spec
 
 services:
-  # ── Service API (Backend Express) ──────────────────────────────
+  # ── Service API (Backend Express + Prisma) ─────────────────────
   - type: web
     name: cathedrale-api
     runtime: node
     region: frankfurt
     plan: free
 
-    # Commandes Render (sans Docker — build natif Node.js)
-    # Build uniquement l'API, pas le frontend Next.js
+    # Root directory VIDE = Render exécute depuis la racine du monorepo
+    # Les scripts racine délèguent aux workspaces via --workspace apps/api
     buildCommand: "npm ci && npm run build:api"
-    startCommand: "npm run db:migrate && npm run start:api"
+    startCommand: "npm run prisma:migrate && npm start"
 
     healthCheckPath: /health
 
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: "4000"
+      # Render injecte PORT automatiquement — ne pas fixer à 4000 ici
+      # Le serveur lit process.env.PORT || 4000
       - key: DATABASE_URL
         fromDatabase:
           name: cathedrale-postgres
           property: connectionString
-      # ⚠️  Définir ces secrets dans le dashboard Render :
-      # Dashboard → Service → Environment → Add Environment Variable
+      # Secrets à définir dans Dashboard → Service → Environment
       - key: JWT_ACCESS_SECRET
         sync: false
       - key: JWT_REFRESH_SECRET
@@ -73,7 +85,6 @@ services:
     region: frankfurt
     plan: free
 
-    # Build uniquement le frontend, pas l'API
     buildCommand: "npm ci && npm run build:web"
     startCommand: "npm run start:web"
 
@@ -82,11 +93,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: "3000"
       - key: NEXT_TELEMETRY_DISABLED
         value: "1"
-      # ⚠️  Remplacer par l'URL réelle du service API Render
       - key: NEXT_PUBLIC_API_URL
         sync: false
       - key: NEXT_PUBLIC_SITE_URL
