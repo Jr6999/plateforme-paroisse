@@ -44,6 +44,11 @@ const swaggerSpec = swaggerJSDoc({
       {
         url: `${env.API_URL}/api`,
         description: env.NODE_ENV === "production" ? "Production" : "Développement local"
+      },
+      // Fallback URL relative — fonctionne quelle que soit l'URL de déploiement
+      {
+        url: "/api",
+        description: "Serveur courant (URL relative)"
       }
     ],
     components: {
@@ -87,18 +92,18 @@ export const createApp = () => {
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: "cross-origin" },
-      // Désactiver Content-Security-Policy pour Swagger UI (styles inline)
-      contentSecurityPolicy:
-        env.NODE_ENV === "production"
-          ? {
-              directives: {
-                defaultSrc: ["'self'"],
-                scriptSrc: ["'self'", "'unsafe-inline'"], // requis pour Swagger UI
-                styleSrc: ["'self'", "'unsafe-inline'"],
-                imgSrc: ["'self'", "data:", "https:"]
-              }
-            }
-          : false
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          // Swagger UI requiert unsafe-inline pour ses scripts et styles embarqués
+          scriptSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
+          styleSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
+          imgSrc: ["'self'", "data:", "https:"],
+          connectSrc: ["'self'", env.API_URL],
+          fontSrc: ["'self'", "data:", "cdn.jsdelivr.net"],
+          workerSrc: ["'self'", "blob:"]
+        }
+      }
     })
   );
 
@@ -196,13 +201,27 @@ export const createApp = () => {
   );
 
   // ── Swagger UI ───────────────────────────────────────────────────────────
-  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-    swaggerOptions: {
-      persistAuthorization: true,
-      displayRequestDuration: true
-    },
-    customSiteTitle: "Cathédrale Saint Sauveur — API Docs"
-  }));
+  // Exposer le spec JSON à /docs/swagger.json (chemin relatif à /docs)
+  // Swagger UI le charge en relatif → pas de problème CORS ni CSP
+  app.get("/docs/swagger.json", (_req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.json(swaggerSpec);
+  });
+
+  app.use(
+    "/docs",
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerSpec, {
+      swaggerOptions: {
+        url: "/docs/swagger.json", // chemin absolu servi par ce même serveur
+        persistAuthorization: true,
+        displayRequestDuration: true,
+        tryItOutEnabled: true
+      },
+      customSiteTitle: "Cathédrale Saint Sauveur — API Docs",
+      explorer: true
+    })
+  );
 
   // ── Routes API ───────────────────────────────────────────────────────────
   const api = express.Router();
